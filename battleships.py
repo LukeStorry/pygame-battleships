@@ -27,6 +27,7 @@ class Direction(Enum):
     EAST = 1
     SOUTH = 2
     WEST = 3
+    
     def next(self):
         return Direction((self.value + 1) % 4)
 
