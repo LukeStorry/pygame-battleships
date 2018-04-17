@@ -1,5 +1,8 @@
-before_install:
-    - pip3 install pygame
+language: python
+python:
+    - "3.6"
+
+install:
     - pip3 install pycodestyle
     
 script:
