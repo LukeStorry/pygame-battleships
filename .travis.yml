@@ -1,5 +1,6 @@
 before_install:
-    - pip install pep8
+    - pip3 install pygame
+    - pip3 install pep8
     
 script:
     - find . -name \*.py -exec pep8 {} +
