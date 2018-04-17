@@ -1,6 +1,6 @@
 # pygame-battleships
 #### A simple Battleship-style game using Pygame
-
+[![Build Status](https://travis-ci.org/LukeStorry/pygame-battleships.svg?branch=master)](https://travis-ci.org/LukeStorry/pygame-battleships) 
 ---
 
 ## Requirements
