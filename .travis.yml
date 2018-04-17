@@ -1,6 +1,6 @@
 before_install:
     - pip3 install pygame
-    - pip3 install pep8
+    - pip3 install pycodestyle
     
 script:
-    - find . -name \*.py -exec pep8 {} +
+    - pycodestyle battleships.py
