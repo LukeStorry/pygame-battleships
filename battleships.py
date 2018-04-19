@@ -1,9 +1,8 @@
 
-from typing import NamedTuple
-from enum import Enum
-import random
-import pygame
 import sys
+import pygame
+import random
+from enum import Enum
 
 
 ship_sizes = [6, 4, 3, 3, 2]
