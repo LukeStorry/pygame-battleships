@@ -3,8 +3,6 @@ import sys
 import pygame
 import random
 from enum import Enum
-
-
 ship_sizes = [6, 4, 3, 3, 2]
 board_size = 10
 margin = 15
@@ -52,6 +50,7 @@ class Ship:
     def __str__(self):
         return "Ship: ({}, {}), {}, Length {}".format(
             self.x, self.y, self.direction, self.length)
+
 
 
 class Board:
@@ -144,32 +143,99 @@ class Board:
         return output
 
 
-def init_screen():
+class PlayerBoard(Board):
+ def init(self, screen):
+     board = Board(board_size)
+     ship = None
+     ship_direction = Direction.NORTH
+     setup_finished = False
+     ship_num = 0
+     while not setup_finished:
+         display(screen, board, board)
+
+         if ship is None:
+             text = 'Click where you want your {}-long ship to be:'.format(
+                 ship_sizes[ship_num])
+         elif ship_num < len(ship_sizes):
+             text = 'Click again to rotate or add new {}-long ship:'.format(
+                 ship_sizes[ship_num + 1])
+         else:
+             text = 'Click again to rotate, or here if ready.'
+
+         font = pygame.font.SysFont("Helvetica", 14)
+         screen.blit(font.render(text, True, colours["text"]),
+                     (margin, board_size * cell_size + margin * 2))
+
+         click_x, click_y = get_input("lower")
+         if click_x is not None and click_y is not None:
+             if ship is not None:  # already a ship in the queue
+                 if ship.x == click_x and ship.y == click_y:  # rotate
+                     board.remove(ship)
+                     ship_direction = ship_direction.next()
+                 else:  # build new
+                     ship_num += 1
+             ship = Ship(click_x, click_y, ship_direction, ship_sizes[ship_num])
+
+             # Add ship to board, or delete if not valid
+             if board.is_valid(ship):
+                 board.add(ship)
+             else:
+                 ship_direction = ship_direction.next()
+                 ship = None
+
+         if len(board.ships_list) == len(ship_sizes):
+             setup_finished = True
+
+         pygame.display.flip()
+         pygame.time.Clock().tick(60)
+
+class AIBoard(Board):
+    def init(self):
+        super().__init__(board_size)
+        for ship_length in ship_sizes:
+            shipFound = False
+            while not shipFound:
+                x = random.randint(0, board_size - 1)
+                y = random.randint(0, board_size - 1)
+                ship_direction = random.choice(list(Direction))
+                ship = Ship(x, y, ship_direction, ship_length)
+
+                if self.is_valid(ship):
+                    self.add(ship)
+                    shipFound = True
+
+class Display:
+
+def __init__(self, board_size, cell_size, margin):
+    self.screen = screen
+    self.board_size=board_size
+    self.cell_size=cell_size
+    self.margin=margin
+
     pygame.init()
     pygame.font.init()
 
     screen_width = cell_size * board_size + 2 * margin
     screen_height = 2 * cell_size * board_size + 3 * margin
-    screen = pygame.display.set_mode([screen_width, screen_height])
-
+    self.screen = pygame.display.set_mode([screen_width, screen_height])
     pygame.display.set_caption("Battleships")
     return screen
 
 
-def display(screen, board1, board2, include_ai_ships=False):
-    screen.fill(colours["background"])
-    for y in range(board_size):
-        for x in range(board_size):
-            grid = board1.colour_grid(include_ships=include_ai_ships)
-            rectangle = [margin + x * cell_size,
-                         margin + y * cell_size, cell_size, cell_size]
-            pygame.draw.rect(screen, grid[y][x], rectangle)
+def show(self, upper_board, lower_board, include_top_ships=False):
+    self.screen.fill(colours["background"])
+    for y in range(self.board_size):
+        for x in range(self.board_size):
+            grid = upper_board.colour_grid(include_ships=include_top_ships)
+            rectangle = [self.margin + x * self.cell_size,
+                         self.margin + y * self.cell_size, self.cell_size, self.cell_size]
+            pygame.draw.rect(self.screen, grid[y][x], rectangle)
 
-            grid = board2.colour_grid(include_ships=True)
-            offset = margin * 2 + board_size * cell_size
-            rectangle = [margin + x * cell_size, offset + y * cell_size,
+            grid = lower_board.colour_grid(include_ships=True)
+            offset =self. margin * 2 + self.board_size * cell_size
+            rectangle = [self.margin + x * self.cell_size, offset + y * self.cell_size,
                          cell_size, cell_size]
-            pygame.draw.rect(screen, grid[y][x], rectangle)
+            pygame.draw.rect(self.screen, grid[y][x], rectangle)
 
 
 def get_input(board):
@@ -188,67 +254,7 @@ def get_input(board):
     return None, None
 
 
-def setup_ai_board():
-    board = Board(board_size)
-    for ship_length in ship_sizes:
-        shipFound = False
-        while not shipFound:
-            x = random.randint(0, board_size - 1)
-            y = random.randint(0, board_size - 1)
-            ship_direction = random.choice(list(Direction))
-            ship = Ship(x, y, ship_direction, ship_length)
 
-            if board.is_valid(ship):
-                board.add(ship)
-                shipFound = True
-    return board
-
-
-def setup_player_board(screen):
-    board = Board(board_size)
-    ship = None
-    ship_direction = Direction.NORTH
-    setup_finished = False
-    ship_num = 0
-    while not setup_finished:
-        display(screen, board, board)
-
-        if ship is None:
-            text = 'Click where you want your {}-long ship to be:'.format(
-                ship_sizes[ship_num])
-        elif ship_num < len(ship_sizes):
-            text = 'Click again to rotate or add new {}-long ship:'.format(
-                ship_sizes[ship_num + 1])
-        else:
-            text = 'Click again to rotate, or here if ready.'
-
-        font = pygame.font.SysFont("Helvetica", 14)
-        screen.blit(font.render(text, True, colours["text"]),
-                    (margin, board_size * cell_size + margin * 2))
-
-        click_x, click_y = get_input("lower")
-        if click_x is not None and click_y is not None:
-            if ship is not None:  # already a ship in the queue
-                if ship.x == click_x and ship.y == click_y:  # rotate
-                    board.remove(ship)
-                    ship_direction = ship_direction.next()
-                else:  # build new
-                    ship_num += 1
-            ship = Ship(click_x, click_y, ship_direction, ship_sizes[ship_num])
-
-            # Add ship to board, or delete if not valid
-            if board.is_valid(ship):
-                board.add(ship)
-            else:
-                ship_direction = ship_direction.next()
-                ship = None
-
-        if len(board.ships_list) == len(ship_sizes):
-            setup_finished = True
-
-        pygame.display.flip()
-        pygame.time.Clock().tick(60)
-    return board
 
 
 def ai_shoot(board):
