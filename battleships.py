@@ -1,7 +1,7 @@
 
 import sys
 import pygame
-import random
+import random.randint, random.choice
 from enum import Enum
 
 
@@ -39,8 +39,9 @@ class Ship:
 
 
 class Board:
-    def __init__(self, size):
+    def __init__(self, size=10, ship_sizes=[6, 4, 3, 3, 2]):
         self.size = size
+        self.ship_sizes = ship_sizes
         self.ships_list = []
         self.hits_list = []
         self.misses_list = []
@@ -143,10 +144,10 @@ class PlayerBoard(Board):
             display.show(self, None)
             if ship is None:
                 text = 'Click where you want your {}-long ship to be:'.format(
-                    ship_sizes[ship_num])
-            elif ship_num < len(ship_sizes):
-                text = 'Click again to rotate or ' +
-                'add new {}-long ship:'.format(ship_sizes[ship_num + 1])
+                    self.ship_sizes[ship_num])
+            elif ship_num < len(self.ship_sizes):
+                text = 'Click again to rotate or add new ' + \
+                    '{}-long ship:'.format(self.ship_sizes[ship_num + 1])
             else:
                 text = 'Click again to rotate, or here if ready.'
             display.show_text(text, lower=True)
@@ -160,7 +161,7 @@ class PlayerBoard(Board):
                 else:  # build new
                     ship_num += 1
                     ship = Ship(click_x, click_y, ship_direction,
-                                ship_sizes[ship_num])
+                                self.ship_sizes[ship_num])
 
             # Add ship to board, or delete if not valid
             if board.is_valid(ship):
@@ -169,14 +170,14 @@ class PlayerBoard(Board):
                 ship_direction = ship_direction.next()
                 ship = None
 
-        if len(board.ships_list) == len(ship_sizes):
+        if len(board.ships_list) == len(self.ship_sizes):
             setup_finished = True
 
 
 class AIBoard(Board):
     def init(self):
         super().__init__(board_size)
-        for ship_length in ship_sizes:
+        for ship_length in self.ship_sizes:
             shipFound = False
             while not shipFound:
                 x = random.randint(0, board_size - 1)
@@ -236,16 +237,16 @@ class Display:
         pygame.display.flip()
         pygame.time.Clock().tick(60)
 
-    def get_input(board):
+    def get_input(location):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                quit_game()
+                close()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = pygame.mouse.get_pos()
                 x = (x - margin) // cell_size
-                if board == 'upper':
+                if location == 'upper':
                     y = (y - margin) // cell_size
-                else if board == 'lower':
+                else if location == 'lower':
                     y = ((y - (board_size * cell_size + 2 * margin)) //
                          cell_size)
                 else return None, None
@@ -270,17 +271,18 @@ class Display:
 
 
 class Game():
-    ship_sizes = [6, 4, 3, 3, 2]
-    
-    def __init__(self, display):
-        self.ai_board = setup_ai_board()
-        self.player_board = setup_player_board(display)
-    while not check_gameover():
-        if player_shoot():
-            ai_shoot()
 
-        display.show(ai_board, player_board)
-        display.show_text("Click to guess:")
+    def __init__(self, display):
+        self.ai_board = AIBoard()
+        self.player_board = PlayerBoard(display)
+
+    def play(self):
+        while not check_gameover():
+            if player_shoot():
+                ai_shoot()
+
+            self.display.show(ai_board, player_board)
+            self.display.show_text("Click to guess:")
 
     def ai_shoot():
         shot = False
@@ -301,10 +303,10 @@ class Game():
             return False
 
     def check_gameover():
-        if self.board1.gameover():
+        if self.ai_board.gameover():
             print("Congratulations you won")
             return True
-        elif self.board2.gameover():
+        elif self.player_board.gameover():
             print("Congratulations you lost")
             return True
         else:
@@ -315,7 +317,8 @@ def main():
     replay = True
     while replay:
         d = Display()
-        Game(d)
+        g = Game(d)
+        g.play()
         d.close()
 
         response = input("Replay? y/n: ")
