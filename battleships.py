@@ -1,5 +1,4 @@
 
-import sys
 import pygame
 import random
 from enum import Enum
@@ -17,8 +16,7 @@ class Direction(Enum):
 
 class Ship:
     def __init__(self, x, y, d, l):
-        self.x = x
-        self.y = y
+        self.location = (x, y)
         self.direction = d
         self.length = l
 
@@ -34,12 +32,12 @@ class Ship:
                 self.coordinate_list.append((x - i, y))
 
     def __str__(self):
-        return "Ship: ({}, {}), {}, Length {}".format(
-            self.x, self.y, self.direction, self.length)
+        return "Ship: ({},{}), {}, Length {}".format(
+            *self.location, self.direction, self.length)
 
 
 class Board:
-    def __init__(self, size, ship_sizes=[6, 4, 3, 3, 2]):
+    def __init__(self, size=10, ship_sizes=[6, 4, 3, 3, 2]):
         self.size = size
         self.ship_sizes = ship_sizes
         self.ships_list = []
@@ -55,16 +53,14 @@ class Board:
                 return False
         return True
 
-    def add(self, ship: Ship):
+    def add_ship(self, ship: Ship):
         if self.is_valid(ship):
-            print(ship)
             self.ships_list.append(ship)
-            print(self.ships_list)
             return True
         else:
             return False
 
-    def remove(self, ship):
+    def remove_ship(self, ship):
         self.ships_list.remove(ship)
 
     def ships_overlap(self, ship1, ship2):
@@ -133,53 +129,54 @@ class Board:
 
 
 class PlayerBoard(Board):
-    def __init__(self, board_size, display):
-        super().__init__(board_size)
+    def __init__(self, display, board_size, ship_sizes):
+        super().__init__(board_size, ship_sizes)
         self.display = display
         self.place_ships()
 
     def place_ships(self):
-        ship = None
+        current_ship = None
         ship_direction = Direction.NORTH
         setup_finished = False
         ship_num = 0
         while not setup_finished:
             self.display.show(None, self)
 
-            if ship is None:
+            if current_ship is None:
                 text = 'Click where you want your {}-long ship to be:'.format(
                     self.ship_sizes[ship_num])
-            elif ship_num < len(self.ship_sizes):
+            elif ship_num < len(self.ship_sizes) - 1:
                 text = 'Click again to rotate or add new ' + \
                     '{}-long ship:'.format(self.ship_sizes[ship_num + 1])
             else:
-                text = 'Click again to rotate, or here if ready.'
+                text = 'Click again to rotate, or elsewhere if ready.'
             self.display.show_text(text, lower=True)
 
             x, y = self.display.get_input()
             if x is not None and y is not None:
-                if ship is not None:  # already a ship in the queue
-                    if ship.x == x and ship.y == y:  # rotate
-                        self.remove(ship)
+                if current_ship is not None:  # already a ship in the queue
+                    if (x, y) == current_ship.location:  # same click, rotate
+                        self.remove_ship(current_ship)
                         ship_direction = ship_direction.next()
-                    else:  # build new
-                        ship_num += 1
-                ship = Ship(x, y, ship_direction, self.ship_sizes[ship_num])
+                    else:  # clicked elsewhere
+                        if ship_num >= len(self.ship_sizes) - 1:
+                            setup_finished = True
+                            return
+                        else:  # build new
+                            ship_num += 1
 
-                # Add ship to board, or delete if not valid
-                if not self.add(ship):
+                current_ship = Ship(x, y, ship_direction,
+                                    self.ship_sizes[ship_num])
+                if not self.add_ship(current_ship):
                     ship_direction = ship_direction.next()
-                    ship = None
+                    current_ship = None
 
-            if len(self.ships_list) == len(self.ship_sizes):
-                setup_finished = True
-
-            self.display.flip()
+            Display.flip()
 
 
 class AIBoard(Board):
-    def init(self, board_size):
-        super().__init__(board_size)
+    def __init__(self, board_size, ship_sizes):
+        super().__init__(board_size, ship_sizes)
         for ship_length in self.ship_sizes:
             shipFound = False
             while not shipFound:
@@ -187,21 +184,21 @@ class AIBoard(Board):
                 y = random.randint(0, board_size - 1)
                 ship_direction = random.choice(list(Direction))
                 ship = Ship(x, y, ship_direction, ship_length)
-                if self.add(ship):
+                if self.add_ship(ship):
                     shipFound = True
 
 
 class Display:
     colours = {
-        "water": (0, 0, 150),
-        "ship": (50, 50, 50),
-        "hit": (255, 0, 0),
-        "miss": (100, 150, 255),
-        "background": (0, 0, 0),
-        "text": (255, 255, 255)
+        "water": pygame.color.Color("blue"),
+        "ship": pygame.color.Color("gray"),
+        "hit": pygame.color.Color("red"),
+        "miss": pygame.color.Color("lightcyan"),
+        "background": pygame.color.Color("navy"),
+        "text": pygame.color.Color("white")
     }
 
-    def __init__(self, board_size, cell_size=30, margin=15):
+    def __init__(self, board_size=10, cell_size=30, margin=15):
         self.board_size = board_size
         self.cell_size = cell_size
         self.margin = margin
@@ -212,15 +209,18 @@ class Display:
 
         screen_width = self.cell_size * board_size + 2 * margin
         screen_height = 2 * self.cell_size * board_size + 3 * margin
-        self.screen = pygame.display.set_mode([screen_width, screen_height])
+        self.screen = pygame.display.set_mode(
+            [screen_width, screen_height])
         pygame.display.set_caption("Battleships")
 
     def show(self, upper_board, lower_board, include_top_ships=False):
         if upper_board is not None:
-            upper_colours = upper_board.colour_grid(self.colours, include_top_ships)
+            upper_colours = upper_board.colour_grid(
+                self.colours, include_top_ships)
 
         if lower_board is not None:
-            lower_colours = lower_board.colour_grid(self.colours, include_ships=True)
+            lower_colours = lower_board.colour_grid(
+                self.colours, include_ships=True)
 
         self.screen.fill(Display.colours["background"])
         for y in range(self.board_size):
@@ -229,20 +229,20 @@ class Display:
                 if upper_board is not None:
                     pygame.draw.rect(self.screen, upper_colours[y][x],
                                      [self.margin + x * self.cell_size,
-                                     self.margin + y * self.cell_size,
-                                     self.cell_size, self.cell_size])
+                                      self.margin + y * self.cell_size,
+                                      self.cell_size, self.cell_size])
 
                 if lower_board is not None:
                     offset = self.margin * 2 + self.board_size * self.cell_size
                     pygame.draw.rect(self.screen, lower_colours[y][x],
                                      [self.margin + x * self.cell_size,
-                                     offset + y * self.cell_size,
-                                     self.cell_size, self.cell_size])
+                                      offset + y * self.cell_size,
+                                      self.cell_size, self.cell_size])
 
     def get_input(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.close()
+                Display.close()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = pygame.mouse.get_pos()
                 y = y % (self.board_size * self.cell_size + self.margin)
@@ -263,43 +263,45 @@ class Display:
         if lower:
             self.screen.blit(label, (x, y_lo))
 
-    def flip(self):
+    @classmethod
+    def flip(cls):
         pygame.display.flip()
         pygame.time.Clock().tick(60)
 
-    def close(self):
+    @classmethod
+    def close(cls):
         pygame.display.quit()
         pygame.quit()
-        sys.exit()
 
 
 class Game:
-    def __init__(self, size, display):
-        self.ai_board = AIBoard(size)
-        self.player_board = PlayerBoard(size, display)
+    def __init__(self, display, size=10, ship_sizes=[6, 4, 3, 3, 2]):
+        self.board_size = size
+        self.display = display
+        self.ai_board = AIBoard(size, ship_sizes)
+        self.player_board = PlayerBoard(display, size, ship_sizes)
 
     def play(self):
-        print(self.ai_board.ships_list)
-        while not self.check_gameover():
-            print("t")
+        print("play starts")
+        while not self.gameover():
             if self.player_shoot():
                 self.ai_shoot()
-
-            self.display.show(ai_board, player_board)
+            self.display.show(self.ai_board, self.player_board)
             self.display.show_text("Click to guess:")
+            Display.flip()
 
     def ai_shoot(self):
         shot = False
         while not shot:
-            x = random.randint(0, board_size - 1)
-            y = random.randint(0, board_size - 1)
+            x = random.randint(0, self.board_size - 1)
+            y = random.randint(0, self.board_size - 1)
             shot = self.player_board.shoot(x, y)
 
     def player_shoot(self):
-        x, y = self.get_input()
+        x, y = self.display.get_input()
         return self.ai_board.shoot(x, y)
 
-    def check_gameover(self):
+    def gameover(self):
         if self.ai_board.gameover():
             print("Congratulations you won")
             return True
@@ -313,9 +315,9 @@ class Game:
 def main():
     replay = True
     while replay:
-        d = Display(10)
-        g = Game(10, d)
-        g.play()
+        d = Display()
+        Game(d).play()
+        # Game(d, 2, [1,1]).play()
         d.close()
 
         response = input("Replay? y/n: ")
