@@ -57,7 +57,9 @@ class Board:
 
     def add(self, ship: Ship):
         if self.is_valid(ship):
+            print(ship)
             self.ships_list.append(ship)
+            print(self.ships_list)
             return True
         else:
             return False
@@ -277,6 +279,7 @@ class Game:
         self.player_board = PlayerBoard(size, display)
 
     def play(self):
+        print(self.ai_board.ships_list)
         while not self.check_gameover():
             print("t")
             if self.player_shoot():
