@@ -1,42 +1,58 @@
 
 import pygame
 import random
+from abc import ABC
 from enum import Enum
+from itertools import zip_longest
 
 
 class Direction(Enum):
+    """A enum for storing the four points of the compass"""
     NORTH = 0
     EAST = 1
     SOUTH = 2
     WEST = 3
 
+    @property
     def next(self):
+        """Returns the next point of the compass, for rotations"""
         return Direction((self.value + 1) % 4)
 
 
 class Ship:
+    """An object to store the data of one ship"""
+
     def __init__(self, x, y, d, l):
         self.location = (x, y)
         self.direction = d
         self.length = l
 
-        self.coordinate_list = []
-        for i in range(self.length):
-            if self.direction is Direction.NORTH:
-                self.coordinate_list.append((x, y - i))
-            elif self.direction is Direction.EAST:
-                self.coordinate_list.append((x + i, y))
-            elif self.direction is Direction.SOUTH:
-                self.coordinate_list.append((x, y + i))
-            elif self.direction is Direction.WEST:
-                self.coordinate_list.append((x - i, y))
+    @property
+    def coordinate_list(self):
+        """Calculates the list of coordinates that the ship is located over"""
+        x, y = self.location
+        if self.direction == Direction.NORTH:
+            return [(x, y - i) for i in range(self.length)]
+        elif self.direction == Direction.EAST:
+            return [(x + i, y) for i in range(self.length)]
+        elif self.direction == Direction.SOUTH:
+            return [(x, y + i) for i in range(self.length)]
+        elif self.direction == Direction.WEST:
+            return [(x - i, y) for i in range(self.length)]
 
-    def __str__(self):
-        return "Ship: ({},{}), {}, Length {}".format(
+    def rotate(self):
+        """Rotates the ship"""
+        self.direction = self.direction.next
+
+    def __repr__(self):
+        """A nice representation of the Ship object, for debugging"""
+        return "<Ship Object: ({},{}), {}, Length {}>".format(
             *self.location, self.direction, self.length)
 
 
-class Board:
+class Board(ABC):
+    """A abstract base class for boards"""
+
     def __init__(self, size=10, ship_sizes=[6, 4, 3, 3, 2]):
         self.size = size
         self.ship_sizes = ship_sizes
@@ -45,6 +61,7 @@ class Board:
         self.misses_list = []
 
     def is_valid(self, ship):
+        """Checks whether a ship would be a valid placement on the board"""
         for x, y in ship.coordinate_list:
             if x < 0 or y < 0 or x >= self.size or y >= self.size:
                 return False
@@ -54,6 +71,7 @@ class Board:
         return True
 
     def add_ship(self, ship: Ship):
+        """Adds a ship to the board"""
         if self.is_valid(ship):
             self.ships_list.append(ship)
             return True
@@ -61,42 +79,52 @@ class Board:
             return False
 
     def remove_ship(self, ship):
+        """Removes a ship from the board"""
         self.ships_list.remove(ship)
 
     def ships_overlap(self, ship1, ship2):
+        """Checks whether two ships overlap"""
         for ship1_coord in ship1.coordinate_list:
             for ship2_coord in ship2.coordinate_list:
                 if ship1_coord == ship2_coord:
                     return True
         return False
 
+    def get_ship(self, x, y):
+        """Gets a ship object from coordinates"""
+        for ship in self.ships_list:
+            if (x, y) in ship.coordinate_list:
+                return ship
+        return None
+
     def valid_target(self, x, y):
-        for shot_x, shot_y in self.misses_list:
-            if x == shot_x and y == shot_y:
-                return False
-        for shot_x, shot_y in self.hits_list:
-            if x == shot_x and y == shot_y:
+        """Checks whether a set of coordinates is a valid shot
+
+        Coordinates are within the board, and shot hasn't previously been taken
+        """
+        if x not in range(self.size) or y not in range(self.size):
+            return False
+        for previous_shot in self.misses_list + self.hits_list:
+            if (x, y) == previous_shot:
                 return False
         return True
 
     def shoot(self, x, y):
-        if x is None or y is None or not self.valid_target(x, y):
+        """Registers a shot on the board, saving to appropriate list"""
+        if not self.valid_target(x, y):
             return False
 
-        hit = False
         for ship in self.ships_list:
-            for ship_x, ship_y in ship.coordinate_list:
-                if x == ship_x and y == ship_y:
-                    hit = True
-                    break
-        if hit:
-            self.hits_list.append((x, y))
-        else:
-            self.misses_list.append((x, y))
+            for ship_coordinate in ship.coordinate_list:
+                if (x, y) == ship_coordinate:
+                    self.hits_list.append((x, y))
+                    return True
 
+        self.misses_list.append((x, y))
         return True
 
-    def colour_grid(self, colours, include_ships):
+    def colour_grid(self, colours, include_ships=True):
+        """Calculates a colour representation of the board for display"""
         grid = [[colours["water"] for _ in range(self.size)]
                 for _ in range(self.size)]
 
@@ -113,7 +141,9 @@ class Board:
 
         return grid
 
+    @property
     def gameover(self):
+        """Checks to see if all the ships have been fully hit"""
         for ship in self.ships_list:
             for coordinate in ship.coordinate_list:
                 if coordinate not in self.hits_list:
@@ -121,6 +151,10 @@ class Board:
         return True
 
     def __str__(self):
+        """String representation of the board
+
+        similar to colour grid but for printing
+        """
         output = (("~" * self.size) + "\n") * self.size
         for ship in self.ships_list:
             for x, y in ship.coordinate_list:
@@ -129,66 +163,77 @@ class Board:
 
 
 class PlayerBoard(Board):
+    """A Board for user input"""
+
     def __init__(self, display, board_size, ship_sizes):
+        """Initialises the board by placing ships."""
         super().__init__(board_size, ship_sizes)
         self.display = display
-        self.place_ships()
 
-    def place_ships(self):
-        current_ship = None
-        ship_direction = Direction.NORTH
-        setup_finished = False
-        ship_num = 0
-        while not setup_finished:
+        direction = Direction.NORTH
+        while True:
             self.display.show(None, self)
 
-            if current_ship is None:
+            if self.ship_to_place:
                 text = 'Click where you want your {}-long ship to be:'.format(
-                    self.ship_sizes[ship_num])
-            elif ship_num < len(self.ship_sizes) - 1:
-                text = 'Click again to rotate or add new ' + \
-                    '{}-long ship:'.format(self.ship_sizes[ship_num + 1])
+                    self.ship_to_place)
             else:
-                text = 'Click again to rotate, or elsewhere if ready.'
+                text = 'Click again to rotate a ship, or elsewhere if ready.'
             self.display.show_text(text, lower=True)
 
             x, y = self.display.get_input()
             if x is not None and y is not None:
-                if current_ship is not None:  # already a ship in the queue
-                    if (x, y) == current_ship.location:  # same click, rotate
-                        self.remove_ship(current_ship)
-                        ship_direction = ship_direction.next()
-                    else:  # clicked elsewhere
-                        if ship_num >= len(self.ship_sizes) - 1:
-                            setup_finished = True
-                            return
-                        else:  # build new
-                            ship_num += 1
+                ship = self.get_ship(x, y)
+                if ship:
+                    self.remove_ship(ship)
+                    ship.rotate()
+                    if self.is_valid(ship):
+                        self.add_ship(ship)
+                elif self.ship_to_place:
+                    ship = Ship(x, y, direction, self.ship_to_place)
+                    if self.is_valid(ship):
+                        self.add_ship(ship)
+                    else:
+                        direction = direction.next
+                else:
+                    break
 
-                current_ship = Ship(x, y, ship_direction,
-                                    self.ship_sizes[ship_num])
-                if not self.add_ship(current_ship):
-                    ship_direction = ship_direction.next()
-                    current_ship = None
+                if self.is_valid(ship):
+                    self.add_ship(ship)
 
             Display.flip()
 
+    @property
+    def ship_to_place(self):
+        """Returns a ship length that needs to be placed, if any"""
+        placed_sizes = sorted(ship.length for ship in self.ships_list)
+        sizes = sorted(self.ship_sizes)
+        for placed, to_place in zip_longest(placed_sizes, sizes):
+            if placed != to_place:
+                return to_place
+        return None
+
 
 class AIBoard(Board):
+    """A Board controlled by a AI"""
+
     def __init__(self, board_size, ship_sizes):
+        """Initialises the board by randomly placing ships"""
         super().__init__(board_size, ship_sizes)
         for ship_length in self.ship_sizes:
-            shipFound = False
-            while not shipFound:
+            ship_added = False
+            while not ship_added:
                 x = random.randint(0, board_size - 1)
                 y = random.randint(0, board_size - 1)
                 ship_direction = random.choice(list(Direction))
                 ship = Ship(x, y, ship_direction, ship_length)
-                if self.add_ship(ship):
-                    shipFound = True
+                if self.is_valid(ship):
+                    self.add_ship(ship)
+                    ship_added = True
 
 
 class Display:
+    """Class to handle PyGame input and output"""
     colours = {
         "water": pygame.color.Color("blue"),
         "ship": pygame.color.Color("gray"),
@@ -214,13 +259,14 @@ class Display:
         pygame.display.set_caption("Battleships")
 
     def show(self, upper_board, lower_board, include_top_ships=False):
+        """Requests appropriate COlour Grids from boards, and draws them"""
         if upper_board is not None:
             upper_colours = upper_board.colour_grid(
                 self.colours, include_top_ships)
 
         if lower_board is not None:
             lower_colours = lower_board.colour_grid(
-                self.colours, include_ships=True)
+                self.colours)
 
         self.screen.fill(Display.colours["background"])
         for y in range(self.board_size):
@@ -240,6 +286,7 @@ class Display:
                                       self.cell_size, self.cell_size])
 
     def get_input(self):
+        """Converts MouseEvents into board corrdinates, for input"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 Display.close()
@@ -248,12 +295,12 @@ class Display:
                 y = y % (self.board_size * self.cell_size + self.margin)
                 x = (x - self.margin) // self.cell_size
                 y = (y - self.margin) // self.cell_size
-                if x >= 0 and y >= 0 and \
-                        x < self.board_size and y < self.board_size:
+                if x in range(self.board_size) and y in range(self.board_size):
                     return x, y
         return None, None
 
     def show_text(self, text, upper=False, lower=False):
+        """Displays text on the screen, either upper or lower """
         x = self.margin
         y_up = x
         y_lo = self.board_size * self.cell_size + self.margin
@@ -275,59 +322,65 @@ class Display:
 
 
 class Game:
+    """The overall class to control the game"""
+
     def __init__(self, display, size=10, ship_sizes=[6, 4, 3, 3, 2]):
-        self.board_size = size
+        """Sets up the game by generating two Boards"""
         self.display = display
+        self.board_size = size
         self.ai_board = AIBoard(size, ship_sizes)
         self.player_board = PlayerBoard(display, size, ship_sizes)
 
     def play(self):
-        print("play starts")
-        while not self.gameover():
-            if self.player_shoot():
-                self.ai_shoot()
+        """The main game loop, alternating shots until someone wins"""
+        print("Play starts")
+        while not self.gameover:
+            if self.player_shot():
+                self.ai_shot()
             self.display.show(self.ai_board, self.player_board)
             self.display.show_text("Click to guess:")
             Display.flip()
 
-    def ai_shoot(self):
-        shot = False
-        while not shot:
+    def ai_shot(self):
+        """The AI's shot selection just randomly selects coordinates"""
+        x, y = -1, -1
+        while not self.player_board.valid_target(x, y):
             x = random.randint(0, self.board_size - 1)
             y = random.randint(0, self.board_size - 1)
-            shot = self.player_board.shoot(x, y)
+        self.player_board.shoot(x, y)
 
-    def player_shoot(self):
+    def player_shot(self):
+        """Uses input to decide if a shot is valid or not"""
         x, y = self.display.get_input()
-        return self.ai_board.shoot(x, y)
+        if self.ai_board.valid_target(x, y):
+            self.ai_board.shoot(x, y)
+            return True
+        else:
+            return False
 
+    @property
     def gameover(self):
-        if self.ai_board.gameover():
+        """Determines and prints the winner"""
+        if self.ai_board.gameover:
             print("Congratulations you won")
             return True
-        elif self.player_board.gameover():
+        elif self.player_board.gameover:
             print("Congratulations you lost")
             return True
         else:
             return False
 
 
-def main():
-    replay = True
-    while replay:
+if __name__ == "__main__":
+    while True:
         d = Display()
         Game(d).play()
         # Game(d, 2, [1,1]).play()
         d.close()
 
-        response = input("Replay? y/n: ")
+        response = input("Replay? y/n: ").lower()
         while response not in ['y', 'n']:
             response = input("Must be y or n: ")
-
         if response == 'n':
-            replay = False
             print("Thanks, goodbye.")
-
-
-if __name__ == "__main__":
-    main()
+            break
